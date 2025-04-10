@@ -1,0 +1,151 @@
+{% extends "oscar/layout.html" %}
+{% load i18n %}
+{% load widget_tweaks %} {# Naudosime widget_tweaks geresniam stiliavimui, jei reikia #}
+
+{% block title %}
+    {% trans "Register" %} | {{ block.super }}
+{% endblock %}
+
+{% block breadcrumbs %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ homepage_url }}">{% trans "Home" %}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{% trans "Register" %}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block headertext %}{% trans "Register" %}{% endblock %}
+
+{% block content %}
+    <div class="container"> {# Pridėtas konteineris geresniam išdėstymui #}
+        <form id="register_form" method="post" class="form-stacked mt-4"> {# Pridėta form-stacked ir mt-4 klasės #}
+            {% csrf_token %}
+
+            {# === Bendros Formos Klaidos (jei tokių yra) === #}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <ul class="list-unstyled">
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            {# === Paskyros Tipo Pasirinkimas === #}
+            <fieldset class="mb-3">
+                <legend class="h5">{% trans "Account Type" %}</legend>
+                {% include "oscar/partials/form_field.html" with field=form.user_type %}
+            </fieldset>
+
+            {# === Pagrindiniai Laukai (El. paštas, Slaptažodžiai) === #}
+            <fieldset class.mb-3>
+                 <legend class="h5">{% trans "Login Details" %}</legend>
+                 {% include "oscar/partials/form_field.html" with field=form.email %}
+                 {% include "oscar/partials/form_field.html" with field=form.password %}
+                 {% include "oscar/partials/form_field.html" with field=form.password2 %} {# Jei forma naudoja password2 #}
+                 {# ARBA jei naudojate UserCreationForm: #}
+                 {# {% include "oscar/partials/form_field.html" with field=form.password1 %} #}
+                 {# {% include "oscar/partials/form_field.html" with field=form.password2 %} #}
+            </fieldset>
+
+            {# === Privataus Asmens Laukai (RODOMI/SLEPIAMI SU JS) === #}
+            <fieldset id="private-fields" class="mb-3" style="display: none;"> {# Pradžioje paslėpta #}
+                <legend class="h5">{% trans "Personal Information" %}</legend>
+                {% include "oscar/partials/form_field.html" with field=form.first_name %}
+                {% include "oscar/partials/form_field.html" with field=form.last_name %}
+                {% include "oscar/partials/form_field.html" with field=form.phone_number %}
+            </fieldset>
+
+            {# === Įmonės Laukai (RODOMI/SLEPIAMI SU JS) === #}
+            <fieldset id="company-fields" class="mb-3" style="display: none;"> {# Pradžioje paslėpta #}
+                <legend class="h5">{% trans "Company Information" %}</legend>
+                {% include "oscar/partials/form_field.html" with field=form.company_name %}
+                {% include "oscar/partials/form_field.html" with field=form.company_registration_number %}
+                {% include "oscar/partials/form_field.html" with field=form.company_vat_number %}
+
+                <h6 class="mt-3">{% trans "Legal Address" %}</h6>
+                {% include "oscar/partials/form_field.html" with field=form.legal_address %}
+                {% include "oscar/partials/form_field.html" with field=form.legal_city %}
+                <div class="row"> {# Zip ir Country vienoje eilutėje (pavyzdys) #}
+                    <div class="col-md-6">
+                         {% include "oscar/partials/form_field.html" with field=form.legal_zip_code %}
+                    </div>
+                    <div class="col-md-6">
+                         {% include "oscar/partials/form_field.html" with field=form.legal_country %}
+                    </div>
+                </div>
+
+                <h6 class="mt-3">{% trans "Company Contacts" %}</h6>
+                 {% include "oscar/partials/form_field.html" with field=form.company_phone %}
+                 {% include "oscar/partials/form_field.html" with field=form.company_email %}
+
+                <h6 class="mt-3">{% trans "Contact Person (Optional)" %}</h6>
+                {% include "oscar/partials/form_field.html" with field=form.contact_person %}
+                {% include "oscar/partials/form_field.html" with field=form.contact_person_phone %}
+                {% include "oscar/partials/form_field.html" with field=form.contact_person_email %}
+                {% include "oscar/partials/form_field.html" with field=form.contact_person_position %}
+            </fieldset>
+
+            {# === Mygtukas ir Kitos Nuorodos === #}
+            <div class="d-grid gap-2"> {# Naudojam d-grid geresniam mygtuko išdėstymui #}
+                 <button name="registration_submit" type="submit" value="Register" class="btn btn-primary btn-lg" data-loading-text="{% trans 'Registering...' %}">{% trans 'Register' %}</button>
+            </div>
+            {% if cancel_url %}
+                <p class="text-center mt-3">
+                     {% trans "or" %} <a href="{{ cancel_url }}">{% trans "cancel" %}</a>.
+                </p>
+            {% endif %}
+            <p class="text-center mt-3">
+                {% trans "Already have an account?" %} <a href="{% url 'oscar:customer:login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">{% trans "Log In" %}</a>
+            </p>
+        </form>
+    </div>
+
+    {# === JavaScript Laukų Rodymui/Slėpimui === #}
+    {# Įsitikinkite, kad jQuery yra įkeltas jūsų pagrindiniame layout.html arba įkelkite čia #}
+    {# <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> #}
+    <script>
+    $(document).ready(function() {
+        const companyFieldsDiv = $('#company-fields');
+        const privateFieldsDiv = $('#private-fields');
+        // Gauname radio mygtukus pagal name atributą
+        const userTypeRadios = $('input[name="{{ form.user_type.name }}"]'); // Naudojam formos lauko vardą
+
+        function toggleFields() {
+            const selectedType = $('input[name="{{ form.user_type.name }}"]:checked').val();
+
+            // Paslepiam visus laukus prieš rodant reikiamus
+            companyFieldsDiv.hide();
+            privateFieldsDiv.hide();
+            // Nuimam 'required' atributus (jei buvom pridėję)
+            companyFieldsDiv.find('input, select, textarea').prop('required', false);
+            privateFieldsDiv.find('input, select, textarea').prop('required', false);
+
+
+            if (selectedType === '{{ form.user_type.field.widget.choices.1.0 }}') { // Tikrinam pagal 'company' reikšmę
+                companyFieldsDiv.slideDown();
+                // Nustatome 'required' BŪTINIEMS įmonės laukams (pagal ID)
+                $('#id_company_name').prop('required', true); // Patikrinkite tikslius ID naršyklės įrankiais
+                $('#id_company_registration_number').prop('required', true);
+                $('#id_legal_address').prop('required', true);
+                $('#id_legal_city').prop('required', true);
+                $('#id_legal_country').prop('required', true);
+
+            } else if (selectedType === '{{ form.user_type.field.widget.choices.0.0 }}') { // Tikrinam pagal 'private' reikšmę
+                privateFieldsDiv.slideDown();
+                // Galima nustatyti 'required' asmens laukams, jei reikia
+                // $('#id_first_name').prop('required', true);
+            }
+        }
+
+        // Pradinis rodymas/slėpimas pagal esamą reikšmę (svarbu, jei grįžtama su klaidomis)
+        toggleFields();
+
+        // Stebėti pasikeitimus
+        userTypeRadios.on('change', toggleFields);
+    });
+    </script>
+
+{% endblock content %}

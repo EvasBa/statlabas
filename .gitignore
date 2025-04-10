@@ -1,0 +1,96 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+bin/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+venv/
+env/
+.env
+
+# Django
+*.log
+*.pot
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+local_settings.py
+
+# Oscar specific
+osc/
+sandbox/
+.oscar/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Database
+*.sqlite3
+*.db
+postgres-data/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+media/
+static/
+!static/.gitkeep
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
+
+# Dependencies
+node_modules/
+bower_components/
+
+# Backup files
+*.bak
+*.tmp
+*.temp
+
+# Environment
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.sass-cache/
+.tmp/
+
+# Deployment
+deploy/
+*.deploy.*
