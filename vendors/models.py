@@ -1,22 +1,15 @@
-import uuid # Reikalingas generate_unique_slug
 from django.db import models
 from django.conf import settings # Reikalingas AUTH_USER_MODEL
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-# --- Importuojam User modelį ---
-from accounts.models import CustomUser # Importuojame iš accounts
-# --- Importuojam Oscar Partner ---
 from oscar.apps.partner.models import Partner as OscarPartner
-# --- Importuojam slug generatorių (patikrinkite kelią!) ---
-# Tarkime, jis yra projekto lygio utils.py
 from config.utils import generate_unique_slug # Arba statulab.utils, priklausomai nuo struktūros
 
 class Vendor(OscarPartner):
-    # --- Pataisom OneToOneField nuorodą ---
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, # Naudojame settings
+        settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name='vendor_profile',
         verbose_name=_('Associated User Account'),
@@ -53,7 +46,6 @@ class Vendor(OscarPartner):
     update_date = models.DateTimeField(_('Update Date'), auto_now=True, help_text=_('Date when the vendor profile was last updated.'))
 
 
-    # --- Metodai lieka tie patys, bet patikrinkite importus viduje, jei tokių yra ---
     @property
     def is_verified(self):
         return self.verification_status == self.VERIFICATION_VERIFIED

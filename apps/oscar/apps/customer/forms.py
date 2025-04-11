@@ -23,9 +23,13 @@ class CustomerRegistrationForm(EmailUserCreationForm):
     
     last_name = forms.CharField(label=_("Last Name"), max_length=150, required=False)
     company_name = forms.CharField(label=_("Company Name"), max_length=255, required=False)
-    company_code = forms.CharField(label=_("Company Code"), max_length=255, required=False)
-    company_address = forms.CharField(label=_("Company Address"), max_length=255, required=False)
-    company_city = forms.CharField(label=_("Company City"), max_length=255, required=False)
+    company_registration_number = forms.CharField(label=_("Company Code"), max_length=255, required=False)
+    company_vat_number = forms.CharField(label=_("Company VAT Number"), max_length=255, required=False)
+    legal_address = forms.CharField(label=_("Company Address"), max_length=255, required=False)
+    legal_city = forms.CharField(label=_("Company City"), max_length=255, required=False)
+    legal_zip_code = forms.CharField(label=_("Company Zip Code"), max_length=20, required=False)
+    legal_country = forms.CharField(label=_("Company Country"), max_length=255, required=False)
+    
 
     class Meta:
         model = CustomUser

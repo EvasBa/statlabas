@@ -2,21 +2,17 @@ from django.db import models
 from django.conf import settings # Reikia AUTH_USER_MODEL
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
-# --- Pataisyta nuoroda į CustomUser ---
 from accounts.models import CustomUser # Importuojame iš accounts
 
 class CompanyProfile(models.Model):
-    # --- Pataisyta OneToOneField ---
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, # Naudojame settings, tai gerai
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='company_profile',
         primary_key=True,
-        # --- Pataisyta limit_choices_to ---
         limit_choices_to={'user_type': CustomUser.USER_TYPE_COMPANY}, # Naudojame importuotą CustomUser
         verbose_name=_('User Account')
     )
-    # ... (likę CompanyProfile laukai) ...
     company_name = models.CharField(_('Company Name'), max_length=255, db_index=True, blank=False)
     company_registration_number = models.CharField(_('Company Registration Number'), max_length=30, blank=True)
     company_vat_number = models.CharField(_('VAT Number'), max_length=50, blank=True)
