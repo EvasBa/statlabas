@@ -7,14 +7,12 @@ from django.utils.translation import gettext_lazy as _
 from oscar.apps.customer.views import AccountRegistrationView as OscarAccountRegistrationView
 from oscar.core.loading import get_class
 from .forms import CustomerRegistrationForm
-from accounts.models import CustomUser
-from profiles.models import CompanyProfile
-
-# Get Oscar basket model
-Basket = get_class('basket.models', 'Basket')
 
 # Setup logger
 logger = logging.getLogger(__name__)
+
+# Get Oscar basket model
+Basket = get_class('basket.models', 'Basket')
 
 class AccountRegistrationView(OscarAccountRegistrationView):
     form_class = CustomerRegistrationForm
@@ -22,29 +20,9 @@ class AccountRegistrationView(OscarAccountRegistrationView):
     success_url = reverse_lazy('customer:profile-view')
 
     def form_valid(self, form):
-        """
-        Handle valid form submission.
-        """
+        """Handle registration form submission."""
         try:
-            user = form.save()
-
-            if user.is_company:
-                company_data = {
-                    'company_name': form.cleaned_data.get('company_name'),
-                    'company_registration_number': form.cleaned_data.get('company_code'),
-                    'company_vat_number': form.cleaned_data.get('company_vat_number'),
-                    'legal_address': form.cleaned_data.get('company_address'),
-                    'legal_city': form.cleaned_data.get('company_city'),
-                    'legal_zip_code': form.cleaned_data.get('company_zip_code'),
-                    'legal_country': form.cleaned_data.get('company_country'),
-                    'user': user
-                }
-                company_data_cleaned = {k: v for k, v in company_data.items() if v is not None and v != ''}
-                try:
-                    CompanyProfile.objects.create(**company_data_cleaned)
-                except Exception as e:
-                    logger.error(f"Failed to create CompanyProfile for user {user.email}: {e}", exc_info=True)
-                    messages.error(self.request, _("There was an issue setting up your company profile. Please contact support."))
+            user = form.save()  # Form handles company profile creation
 
             # Handle authentication
             backend = get_backends()[0]
@@ -58,22 +36,30 @@ class AccountRegistrationView(OscarAccountRegistrationView):
                     saved_basket.owner = user
                     saved_basket.save()
             except Exception as e:
-                logger.warning(f"Failed to merge basket for user {user.email}: {e}", exc_info=True)
+                logger.warning(
+                    f"Failed to merge basket for user {user.email}: {e}",
+                    exc_info=True
+                )
 
+            messages.success(
+                self.request,
+                _("Thanks for registering!")
+            )
             return redirect(self.get_success_url())
 
         except Exception as e:
             logger.error(f"Registration failed: {e}", exc_info=True)
-            messages.error(self.request, _("Registration failed. Please try again."))
+            messages.error(
+                self.request,
+                _("Registration failed. Please try again.")
+            )
             return self.form_invalid(form)
 
     def get_saved_basket(self, user):
-        """
-        Get saved basket if it exists.
-        """
+        """Get saved basket if it exists."""
         if self.request.session.get('oscar_open_basket'):
             try:
-                return Basket.objects.get(  # Fixed typo in 'objects'
+                return Basket.objects.get(
                     id=self.request.session['oscar_open_basket'],
                     status=Basket.OPEN
                 )

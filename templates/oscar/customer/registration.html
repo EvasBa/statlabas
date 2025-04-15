@@ -1,7 +1,6 @@
 {% extends "oscar/layout.html" %}
 {% load i18n %}
 {% load widget_tweaks %}
-{% load static %}
 
 {% block title %}
     {% trans "Register" %} | {{ block.super }}
@@ -18,6 +17,11 @@
         .form-group {
             margin-bottom: 1rem;
         }
+        .help-text {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
     </style>
 {% endblock %}
 
@@ -25,7 +29,7 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ homepage_url }}">{% trans "Home" %}</a></li>
-            <li class="breadcrumb-item active" aria-current="page">{% trans "Register" %}</li>
+            <li class="breadcrumb-item active">{% trans "Register" %}</li>
         </ol>
     </nav>
 {% endblock %}
@@ -66,7 +70,7 @@
 
                     {# Email Field #}
                     <div class="form-group mb-3">
-                        <label for="{{ form.email.id_for_label }}" class="form-label">
+                        <label for="{{ form.email.id_for_label }}" class="form-label required">
                             {{ form.email.label }}
                         </label>
                         {% render_field form.email class="form-control" placeholder="email@example.com" %}
@@ -77,12 +81,12 @@
 
                     {# Password Fields #}
                     <div class="form-group mb-3">
-                        <label for="{{ form.password1.id_for_label }}" class="form-label">
+                        <label for="{{ form.password1.id_for_label }}" class="form-label required">
                             {{ form.password1.label }}
                         </label>
                         {% render_field form.password1 class="form-control" %}
                         {% if form.password1.help_text %}
-                            <small class="form-text text-muted">{{ form.password1.help_text }}</small>
+                            <small class="help-text">{{ form.password1.help_text }}</small>
                         {% endif %}
                         {% if form.password1.errors %}
                             <div class="alert alert-danger">{{ form.password1.errors }}</div>
@@ -90,7 +94,7 @@
                     </div>
 
                     <div class="form-group mb-3">
-                        <label for="{{ form.password2.id_for_label }}" class="form-label">
+                        <label for="{{ form.password2.id_for_label }}" class="form-label required">
                             {{ form.password2.label }}
                         </label>
                         {% render_field form.password2 class="form-control" %}
@@ -115,15 +119,21 @@
                         <h4>{% trans "Company Information" %}</h4>
                         <div class="form-group mb-3">
                             {% render_field form.company_name class="form-control" placeholder=form.company_name.label %}
+                            {% if form.company_name.errors %}
+                                <div class="alert alert-danger">{{ form.company_name.errors }}</div>
+                            {% endif %}
                         </div>
                         <div class="form-group mb-3">
-                            {% render_field form.company_registration_code class="form-control" placeholder=form.company_registration_code.label %}
+                            {% render_field form.company_registration_number class="form-control" placeholder=form.company_registration_number.label %}
+                            {% if form.company_registration_number.errors %}
+                                <div class="alert alert-danger">{{ form.company_registration_number.errors }}</div>
+                            {% endif %}
                         </div>
                         <div class="form-group mb-3">
                             {% render_field form.company_vat_number class="form-control" placeholder=form.company_vat_number.label %}
-                        </div>
-                        <div class="form-group mb-3">
-                            {% render_field form.company_address class="form-control" placeholder=form.company_address.label %}
+                            {% if form.company_vat_number.errors %}
+                                <div class="alert alert-danger">{{ form.company_vat_number.errors }}</div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -144,49 +154,50 @@
 {% endblock %}
 
 {% block extrascripts %}
-{{ block.super }}
-<script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', function() {
-        const companyFields = document.getElementById('company-fields');
-        const privateFields = document.getElementById('private-fields');
-        const radioButtons = document.getElementsByName("{{ form.user_type.name }}");
-        
-        function toggleFields() {
-            const selectedType = document.querySelector('input[name="{{ form.user_type.name }}"]:checked')?.value;
-            console.log('Selected type:', selectedType); // Debug log
+    {{ block.super }}
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function() {
+            const companyFields = document.getElementById('company-fields');
+            const privateFields = document.getElementById('private-fields');
+            const radioButtons = document.getElementsByName("{{ form.user_type.name }}");
             
-            // Hide all fields first
-            companyFields.style.display = 'none';
-            privateFields.style.display = 'none';
-            
-            // Show and set required fields based on selection
-            if (selectedType === 'company') {  // Make sure this matches your model's choice value
-                companyFields.style.display = 'block';
-                companyFields.querySelectorAll('input').forEach(input => {
-                    input.required = true;
-                });
-                privateFields.querySelectorAll('input').forEach(input => {
-                    input.required = false;
-                });
-            } else if (selectedType === 'private') {  // Make sure this matches your model's choice value
-                privateFields.style.display = 'block';
-                privateFields.querySelectorAll('input').forEach(input => {
-                    input.required = true;
-                });
-                companyFields.querySelectorAll('input').forEach(input => {
-                    input.required = false;
-                });
+            function toggleFields() {
+                const selectedType = document.querySelector('input[name="{{ form.user_type.name }}"]:checked')?.value;
+                
+                // Hide all fields first
+                companyFields.style.display = 'none';
+                privateFields.style.display = 'none';
+                
+                // Show and set required fields based on selection
+                if (selectedType === 'company') {
+                    companyFields.style.display = 'block';
+                    companyFields.querySelectorAll('input').forEach(input => {
+                        // Only make certain fields required
+                        if (['company_name', 'company_registration_number', 'company_vat_number'].includes(input.name)) {
+                            input.required = true;
+                        }
+                    });
+                    privateFields.querySelectorAll('input').forEach(input => {
+                        input.required = false;
+                    });
+                } else if (selectedType === 'private') {
+                    privateFields.style.display = 'block';
+                    privateFields.querySelectorAll('input').forEach(input => {
+                        input.required = false;  // Personal fields are optional
+                    });
+                    companyFields.querySelectorAll('input').forEach(input => {
+                        input.required = false;
+                    });
+                }
             }
-        }
-        
-        // Add change event listener to radio buttons
-        radioButtons.forEach(radio => {
-            radio.addEventListener('change', toggleFields);
-            console.log('Radio value:', radio.value); // Debug log
+            
+            // Add change event listener to radio buttons
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', toggleFields);
+            });
+            
+            // Initial state
+            toggleFields();
         });
-        
-        // Initial state
-        toggleFields();
-    });
-</script>
+    </script>
 {% endblock %}

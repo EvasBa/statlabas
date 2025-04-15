@@ -1,0 +1,65 @@
+{% extends "oscar/layout.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}
+    {% trans "Vendor Dashboard" %} | {{ block.super }}
+{% endblock %}
+
+{% block breadcrumbs %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ homepage_url }}">{% trans "Home" %}</a></li>
+            <li class="breadcrumb-item active">{% trans "Vendor Dashboard" %}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3">
+            <div class="card mb-4">
+                <div class="card-header">
+                    {% trans "Vendor Menu" %}
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'vendors:dashboard' %}" class="list-group-item active">
+                        {% trans "Dashboard" %}
+                    </a>
+                    {% comment %}
+                    <a href="{% url 'vendors:profile-update' %}" class="list-group-item">
+                        {% trans "Edit Profile" %}
+                    </a>
+                    {% endcomment %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9">
+            <div class="card mb-4">
+                <div class="card-header">
+                    {% trans "Vendor Information" %}
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">
+                        {% if user.user_type == 'company' %}
+                            {{ user.company_profile.company_name }}
+                        {% else %}
+                            {{ user.get_full_name }}
+                        {% endif %}
+                    </h5>
+                    <p class="card-text">{{ vendor.description }}</p>
+                    {% if vendor.website %}
+                        <p><strong>{% trans "Website" %}:</strong> 
+                            <a href="{{ vendor.website }}" target="_blank">{{ vendor.website }}</a>
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

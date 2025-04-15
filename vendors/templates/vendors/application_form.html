@@ -1,0 +1,116 @@
+{% extends "oscar/layout.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}
+    {% trans "Become a Vendor" %} | {{ block.super }}
+{% endblock %}
+
+{% block breadcrumbs %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ homepage_url }}">{% trans "Home" %}</a></li>
+            <li class="breadcrumb-item active">{% trans "Become a Vendor" %}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h1 class="mb-4">{% trans "Become a Vendor" %}</h1>
+            
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">{% trans "Vendor Application" %}</h5>
+                    
+                    <form method="post" enctype="multipart/form-data" class="form-horizontal">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    <p>{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {# Logo Field #}
+                        <div class="form-group mb-3">
+                            <label for="{{ form.logo.id_for_label }}" class="form-label">
+                                {{ form.logo.label }}
+                            </label>
+                            {{ form.logo }}
+                            {% if form.logo.errors %}
+                                <div class="alert alert-danger">{{ form.logo.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Website Field #}
+                        <div class="form-group mb-3">
+                            <label for="{{ form.website.id_for_label }}" class="form-label">
+                                {{ form.website.label }}
+                            </label>
+                            {{ form.website }}
+                            {% if form.website.errors %}
+                                <div class="alert alert-danger">{{ form.website.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Description Field #}
+                        <div class="form-group mb-3">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                {{ form.description.label }}
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                                <div class="alert alert-danger">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Return Policy Field #}
+                        <div class="form-group mb-3">
+                            <label for="{{ form.return_policy.id_for_label }}" class="form-label">
+                                {{ form.return_policy.label }}
+                            </label>
+                            {{ form.return_policy }}
+                            {% if form.return_policy.errors %}
+                                <div class="alert alert-danger">{{ form.return_policy.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Payment Terms Field #}
+                        <div class="form-group mb-3">
+                            <label for="{{ form.payment_terms.id_for_label }}" class="form-label">
+                                {{ form.payment_terms.label }}
+                            </label>
+                            {{ form.payment_terms }}
+                            {% if form.payment_terms.errors %}
+                                <div class="alert alert-danger">{{ form.payment_terms.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        {# Terms Acceptance #}
+                        <div class="form-group mb-3">
+                            <div class="form-check">
+                                {{ form.terms_accepted }}
+                                <label class="form-check-label" for="{{ form.terms_accepted.id_for_label }}">
+                                    {{ form.terms_accepted.label }}
+                                </label>
+                            </div>
+                            {% if form.terms_accepted.errors %}
+                                <div class="alert alert-danger">{{ form.terms_accepted.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            {% trans "Submit Application" %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

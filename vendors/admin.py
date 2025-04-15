@@ -12,7 +12,7 @@ class VendorAdmin(admin.ModelAdmin):
     search_fields = ('name', 'user__email', 'user__first_name', 'user__last_name', 'user__company_profile__company_name')
     readonly_fields = ('user', 'name', 'code', 'joined_date', 'verified_date', 'date_updated', 'average_rating', 'total_count', 'total_sales')
     fieldsets = (
-        # ... (fieldsets kaip anksčiau, be banko duomenų) ...
+       
     )
     actions = ['mark_as_verified', 'mark_as_rejected']
 
