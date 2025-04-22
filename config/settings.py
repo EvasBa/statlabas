@@ -8,7 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from oscar.defaults import *
 
 # Pridėkite savo aplikacijas prie Python kelio
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'apps'))
+#sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'apps'))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 env_path = BASE_DIR / '.env'
@@ -33,7 +33,7 @@ INSTALLED_APPS = [
     # Mūsų vartotojo aplikacija
     'accounts.apps.AccountsConfig', # <<< Teisinga konfigūracija
     'profiles.apps.ProfilesConfig', # <<< Teisinga konfigūracija
-    'vendors.apps.VendorsConfig', # <<< Teisinga konfigūracija
+   
     'locations.apps.LocationsConfig', # <<< Teisinga konfigūracija
 
 

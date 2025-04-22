@@ -1,13 +1,87 @@
 from django.db import models
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
-from oscar.apps.partner.abstract_models import AbstractStockRecord
+from oscar.apps.partner.abstract_models import AbstractStockRecord, AbstractPartner
+from locations.models import Warehouse
+
+class Partner(AbstractPartner):
+    """
+    Extending Partner model
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='partner_profile',
+    )
+    logo = models.ImageField(
+        _('Logo'),
+        upload_to='partner_logos/',
+        blank=True,
+        null=True,
+        help_text=_('Upload a logo for the partner.')
+    )
+    website = models.URLField(
+        _('Website'),
+        blank=True,
+        null=True,
+        help_text=_('Partner website URL.')
+    )
+    description = models.TextField(
+        _('Description'),
+        blank=True,
+        null=True,
+        help_text=_('Partner description.')
+    )
+
+    return_policy = models.TextField(
+        _('Return Policy'),
+        blank=True,
+        null=True,
+        help_text=_('Partner return policy.')
+    )
+    verification_status = models.CharField(
+        _('Verification Status'),
+        max_length=20,
+        choices=[
+            ('pending', _('Pending')),
+            ('verified', _('Verified')),
+            ('rejected', _('Rejected')),
+        ],
+        default='pending',
+        help_text=_('Status of partner verification.')
+    )
+
+    joined_date = models.DateTimeField(
+        _('Joined Date'),
+        auto_now_add=True,
+        help_text=_('Date when the partner joined.')
+    )
+    date_updated = models.DateTimeField(
+        auto_now=True,
+        help_text=_('Date when the partner profile was last updated.')
+    )
+
+    class Meta:
+        app_label = 'partner'
+        ordering = ['name']
+        verbose_name = _('Partner')
+        verbose_name_plural = _('Partners')
+        
+    def __str__(self):
+        return get_display_name(self.name)
+    
+def get_display_name(self):
+    if hasattr(self.user, 'company_profile'):
+        return self.user.company_profile.company_name
+    return f'{self.user.first_name} {self.user.last_name}'
 
 class StockRecord(AbstractStockRecord):
     """
     Custom StockRecord model that extends Oscar's AbstractStockRecord
     """
     warehouse = models.ForeignKey(
-        'warehouses.Warehouse',
+        Warehouse,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -21,4 +95,4 @@ class StockRecord(AbstractStockRecord):
         verbose_name_plural = _('Stock records')
 
 # Import all the models from Oscar's partner app - THIS MUST COME LAST
-from oscar.apps.partner.models import * # noqa isort:skip
+from oscar.apps.partner.models import *  # noqa isort:skip

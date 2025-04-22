@@ -18,12 +18,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Warehouse(models.Model):
-    # vendor = models.ForeignKey( # <<< Pridėsime vėliau
-    #     'vendors.Vendor',
-    #     on_delete=models.CASCADE,
-    #     related_name='warehouses',
-    #     verbose_name=_("Vendor")
-    # )
+    partner = models.ForeignKey(
+        'partner.Partner',
+        on_delete=models.CASCADE,
+        related_name='warehouses',
+        verbose_name=_("Partner"),
+        help_text=_("The partner that owns this warehouse.")
+    )
     name = models.CharField(
         _("Warehouse/Location Name"),
         max_length=150,
