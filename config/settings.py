@@ -34,22 +34,27 @@ INSTALLED_APPS = [
     'accounts.apps.AccountsConfig', # <<< Teisinga konfigūracija
     'profiles.apps.ProfilesConfig', # <<< Teisinga konfigūracija
     'vendors.apps.VendorsConfig', # <<< Teisinga konfigūracija
+    'locations.apps.LocationsConfig', # <<< Teisinga konfigūracija
 
-    # Oscar apps (naudojame standartines, įskaitant customer)
+
+    # Oscar apps 
     'oscar.config.Shop',
     'oscar.apps.analytics.apps.AnalyticsConfig',
     'oscar.apps.checkout.apps.CheckoutConfig',
     'oscar.apps.address.apps.AddressConfig',
     'oscar.apps.shipping.apps.ShippingConfig',
-    'oscar.apps.catalogue.apps.CatalogueConfig',
+    #'oscar.apps.catalogue.apps.CatalogueConfig',
+    'apps.catalogue.apps.CatalogueConfig',
     'oscar.apps.catalogue.reviews.apps.CatalogueReviewsConfig',
     'oscar.apps.communication.apps.CommunicationConfig',
-    'oscar.apps.partner.apps.PartnerConfig',
+    #'oscar.apps.partner.apps.PartnerConfig',
+    'apps.partner.apps.PartnerConfig', # <<< Teisinga konfigūracija
     'oscar.apps.basket.apps.BasketConfig',
     'oscar.apps.payment.apps.PaymentConfig',
     'oscar.apps.offer.apps.OfferConfig',
     'oscar.apps.order.apps.OrderConfig',
-    'apps.oscar.apps.customer.apps.CustomerConfig', # <<< STANDARTINĖ OSCAR
+    'apps.customer.apps.CustomerConfig',
+    #'apps.oscar.apps.customer.apps.CustomerConfig', # <<< STANDARTINĖ OSCAR
     'oscar.apps.search.apps.SearchConfig',
     'oscar.apps.voucher.apps.VoucherConfig',
     'oscar.apps.wishlists.apps.WishlistsConfig',
@@ -59,7 +64,8 @@ INSTALLED_APPS = [
     'oscar.apps.dashboard.orders.apps.OrdersDashboardConfig',
     'oscar.apps.dashboard.catalogue.apps.CatalogueDashboardConfig',
     'oscar.apps.dashboard.offers.apps.OffersDashboardConfig',
-    'oscar.apps.dashboard.partners.apps.PartnersDashboardConfig',
+    #'oscar.apps.dashboard.partners.apps.PartnersDashboardConfig',
+    'apps.dashboard.partners.apps.PartnersDashboardConfig',
     'oscar.apps.dashboard.pages.apps.PagesDashboardConfig',
     'oscar.apps.dashboard.ranges.apps.RangesDashboardConfig',
     'oscar.apps.dashboard.reviews.apps.ReviewsDashboardConfig',
@@ -75,10 +81,13 @@ INSTALLED_APPS = [
     'django_tables2',
     'rest_framework',
     'rest_framework_simplejwt',
+    'django.contrib.gis', # PostGIS
 ]
 
 SITE_ID = 1
 AUTH_USER_MODEL = 'accounts.CustomUser'
+OSCAR_PRODUCT_MODEL = 'apps.catalogue.Product' # Nurodo, kad naudojame savo katalogo modelį
+OSCAR_STOCKRECORD_MODEL = 'apps.partner.StockRecord' # Nurodo, kad naudojame savo sandėlio modelį
 
 AUTHENTICATION_BACKENDS = (
     'oscar.apps.customer.auth_backends.EmailBackend',
@@ -126,7 +135,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django.contrib.gis.db.backends.postgis', # PostGIS
         'NAME': os.environ.get('DB_NAME', 'oscardb'), # Naujas vardas
         'USER': os.environ.get('DB_USER', 'oscaruser'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),

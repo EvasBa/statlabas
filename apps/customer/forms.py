@@ -84,4 +84,4 @@ class CustomerRegistrationForm(EmailUserCreationForm):
         return user
 
 # Import all other forms from oscar at the end
-from apps.oscar.apps.customer.forms import *  # noqa isort:skip
+from oscar.apps.customer.forms import *  # noqa isort:skip

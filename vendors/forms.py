@@ -16,7 +16,7 @@ class VendorApplicationForm(forms.ModelForm):
     )
     class Meta:
         model = Vendor
-        fields = ['logo', 'website', 'description', 'return_policy']
+        fields = ['logo', 'website', 'description', 'return_policy', 'default_location_name']
         success_message = _('Your application has been submitted successfully. We will review it and get back to you soon.')
         #success_url = '/vendor/application/success/'  # URL to redirect after successful submission
         error_messages = {
@@ -25,18 +25,21 @@ class VendorApplicationForm(forms.ModelForm):
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
             'return_policy': forms.Textarea(attrs={'rows': 4}),
+            'default_location_name': forms.TextInput(attrs={'placeholder': _('Enter your location name')}),
         }
         labels = {
             'logo': _('Logo'),
             'website': _('Website'),
             'description': _('Description'),
             'return_policy': _('Return Policy'),
+            'default_location_name': _('Default Location Name'),
         }
         help_texts = {
             'logo': _('Upload a logo for the vendor.'),
             'website': _('Vendor website URL.'),
             'description': _('Vendor description.'),
             'return_policy': _('Return policy of the vendor.'),
+            'default_location_name': _('Name of the default location where items are located if no specific warehouse is used. e.g. Kaunas, Kauno rajonas.'),
         }
     # dont need this as we are using the user object to get the vendor profile
     # def __init__(self, *args, **kwargs):
