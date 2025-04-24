@@ -3,6 +3,7 @@ from django.contrib.gis.db import models as gis_models
 from django.utils.translation import gettext_lazy as _
 from django.conf import settings # Reikės AUTH_USER_MODEL, jei susiesim tiesiogiai
 
+
 # Importuojam geopy (jei įdiegta)
 try:
     from geopy.geocoders import Nominatim
@@ -19,11 +20,12 @@ logger = logging.getLogger(__name__)
 
 class Warehouse(models.Model):
     partner = models.ForeignKey(
-        'partner.Partner',
+        'partner.Partner', # Reikės importuoti partner modelį
         on_delete=models.CASCADE,
         related_name='warehouses',
-        verbose_name=_("Partner"),
-        help_text=_("The partner that owns this warehouse.")
+        verbose_name=_("Partner/Vendor"),
+        help_text=_("The partner that owns this warehouse."),
+        null=True
     )
     name = models.CharField(
         _("Warehouse/Location Name"),

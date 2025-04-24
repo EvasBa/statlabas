@@ -30,11 +30,12 @@ INSTALLED_APPS = [
     'django.contrib.sites',
     'django.contrib.flatpages',
 
-    # Mūsų vartotojo aplikacija
-    'accounts.apps.AccountsConfig', # <<< Teisinga konfigūracija
-    'profiles.apps.ProfilesConfig', # <<< Teisinga konfigūracija
+    
+    'accounts.apps.AccountsConfig', # custom user model
+    'profiles.apps.ProfilesConfig', # company profiles
    
-    'locations.apps.LocationsConfig', # <<< Teisinga konfigūracija
+    'locations.apps.LocationsConfig', # warehouse locations
+    'api.apps.ApiConfig', # API app
 
 
     # Oscar apps 
@@ -86,8 +87,9 @@ INSTALLED_APPS = [
 
 SITE_ID = 1
 AUTH_USER_MODEL = 'accounts.CustomUser'
-OSCAR_PRODUCT_MODEL = 'apps.catalogue.Product' # Nurodo, kad naudojame savo katalogo modelį
-OSCAR_STOCKRECORD_MODEL = 'apps.partner.StockRecord' # Nurodo, kad naudojame savo sandėlio modelį
+OSCAR_CUSTOM_APPS = True
+OSCAR_PRODUCT_MODEL = 'catalogue.Product' # Nurodo, kad naudojame savo katalogo modelį
+OSCAR_STOCKRECORD_MODEL = 'partner.StockRecord' # Nurodo, kad naudojame savo sandėlio modelį
 
 AUTHENTICATION_BACKENDS = (
     'oscar.apps.customer.auth_backends.EmailBackend',

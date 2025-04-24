@@ -3,7 +3,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from oscar.apps.partner.abstract_models import AbstractStockRecord, AbstractPartner
-from locations.models import Warehouse
+from django.utils import timezone
+
 
 class Partner(AbstractPartner):
     """
@@ -13,6 +14,9 @@ class Partner(AbstractPartner):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name='partner_profile',
+        null=True,
+        help_text=_('User associated with this partner.'),
+        blank=True
     )
     logo = models.ImageField(
         _('Logo'),
@@ -55,7 +59,10 @@ class Partner(AbstractPartner):
     joined_date = models.DateTimeField(
         _('Joined Date'),
         auto_now_add=True,
-        help_text=_('Date when the partner joined.')
+        help_text=_('Date when the partner joined.'),
+        #default=timezone.now,
+        null=True,
+        
     )
     date_updated = models.DateTimeField(
         auto_now=True,
@@ -81,7 +88,7 @@ class StockRecord(AbstractStockRecord):
     Custom StockRecord model that extends Oscar's AbstractStockRecord
     """
     warehouse = models.ForeignKey(
-        Warehouse,
+        'locations.Warehouse',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -91,8 +98,8 @@ class StockRecord(AbstractStockRecord):
 
     class Meta:
         app_label = 'partner'
-        verbose_name = _('Stock record')
-        verbose_name_plural = _('Stock records')
+        verbose_name = _('Partner Stock Record')
+        verbose_name_plural = _('Partner Stock Records')
 
 # Import all the models from Oscar's partner app - THIS MUST COME LAST
 from oscar.apps.partner.models import *  # noqa isort:skip
