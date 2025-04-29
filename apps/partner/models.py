@@ -1,15 +1,25 @@
 from django.db import models
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from oscar.apps.partner.abstract_models import AbstractStockRecord, AbstractPartner
-from django.utils import timezone
+from django.contrib.gis.db import models
 
 
 class Partner(AbstractPartner):
     """
     Extending Partner model
     """
+    # Add status constants
+    STATUS_PENDING = 'pending'
+    STATUS_VERIFIED = 'verified'
+    STATUS_REJECTED = 'rejected'
+    
+    VERIFICATION_CHOICES = [
+        (STATUS_PENDING, _('Pending')),
+        (STATUS_VERIFIED, _('Verified')),
+        (STATUS_REJECTED, _('Rejected')),
+    ]
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -44,15 +54,20 @@ class Partner(AbstractPartner):
         null=True,
         help_text=_('Partner return policy.')
     )
+
+    default_location = models.PointField(
+        _('Default Location'),
+        null=True,
+        blank=True,
+        help_text=_('Default location of the partner.'),
+        srid=4326,
+    )
+
     verification_status = models.CharField(
         _('Verification Status'),
         max_length=20,
-        choices=[
-            ('pending', _('Pending')),
-            ('verified', _('Verified')),
-            ('rejected', _('Rejected')),
-        ],
-        default='pending',
+        choices=VERIFICATION_CHOICES,
+        default=STATUS_PENDING,
         help_text=_('Status of partner verification.')
     )
 
@@ -76,12 +91,20 @@ class Partner(AbstractPartner):
         verbose_name_plural = _('Partners')
         
     def __str__(self):
-        return get_display_name(self.name)
+        if self.user and hasattr(self.user, 'company_profile'):
+            return self.user.company_profile.company_name
+        if self.user:
+            return f"{self.user.get_full_name() or self.user.email}"
+        return self.name or "Unknown Partner"
     
-def get_display_name(self):
-    if hasattr(self.user, 'company_profile'):
-        return self.user.company_profile.company_name
-    return f'{self.user.first_name} {self.user.last_name}'
+    def get_display_name(self):
+        return str(self)
+    
+    @property
+    def is_verified(self):
+        return self.verification_status == self.STATUS_VERIFIED
+    
+
 
 class StockRecord(AbstractStockRecord):
     """

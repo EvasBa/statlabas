@@ -5,7 +5,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
+
 from oscar.defaults import *
+from datetime import timedelta
 
 # Pridėkite savo aplikacijas prie Python kelio
 #sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'apps'))
@@ -83,6 +85,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'django.contrib.gis', # PostGIS
+    'django_filters', # Django Filter
 ]
 
 SITE_ID = 1
@@ -157,6 +160,32 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    )
+}
+
+# JWT Authentication settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': os.environ.get('JWT_SECRET_KEY', SECRET_KEY),
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+}
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -182,3 +211,28 @@ OSCAR_REQUIRED_ADDRESS_FIELDS = (
 )
 # Nurodo klasę, kurią Oscar naudoja dinamiškam klasių įkėlimui
 #OSCAR_DYNAMIC_CLASS_LOADER = 'oscar.core.loading.DjangoOscarCoreDynamicClassLoader'
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO', # Rodyti INFO ir aukštesnio lygio pranešimus
+    },
+    'loggers': {
+        'api': { # Jūsų API aplikacijos loggeris
+            'handlers': ['console'],
+            'level': 'DEBUG', # Rodyti DEBUG pranešimus iš api app
+            'propagate': True,
+        },
+        'django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+    },
+}

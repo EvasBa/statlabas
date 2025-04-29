@@ -1,18 +1,19 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenRefreshView
 from . import views # Importuojame vaizdus
+from .views import CustomTokenObtainPairView, PublicProductViewSet # Importuojame mūsų CustomTokenObtainPairView
 
 # Sukuriame routerį
 router = DefaultRouter()
 # Registruojame VendorProductViewSet su 'vendor/products' maršrutu
-router.register(r'vendor/products', views.VendorProductViewSet, basename='vendor-product')
-# Čia vėliau registruosime viešą produktų viewset'ą:
-# router.register(r'products', views.PublicProductViewSet, basename='public-product')
+router.register(r'partner/products', views.PartnerProductViewSet, basename='partner-product')
+router.register(r'products', views.PublicProductViewSet, basename='product')
+
 
 # API URL Patternai
 urlpatterns = [
     path('', include(router.urls)),
-    # Čia galima pridėti kitus API endpoint'us (pvz., autentifikacijai)
-    # path('auth/', include('djoser.urls')), # Jei naudotumėte djoser
-    # path('auth/', include('djoser.urls.jwt')),
+    path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
