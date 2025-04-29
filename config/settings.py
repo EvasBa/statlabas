@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'django.contrib.flatpages',
+   
 
     
     'accounts.apps.AccountsConfig', # custom user model
@@ -86,6 +87,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'django.contrib.gis', # PostGIS
     'django_filters', # Django Filter
+    'corsheaders', # CORS
 ]
 
 SITE_ID = 1
@@ -100,6 +102,7 @@ AUTHENTICATION_BACKENDS = (
 )
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -112,6 +115,12 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'config.urls'
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+]
+
+CORS_ALLOW_CREDENTIALS = True
 
 TEMPLATES = [
     {
