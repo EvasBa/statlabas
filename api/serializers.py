@@ -7,6 +7,12 @@ from django.utils.translation import gettext_lazy as _
 import logging
 from django.core.exceptions import ValidationError
 from django.contrib.gis.geos import Point # Reikalingas Partner modeliui
+from django.contrib.auth import get_user_model
+from profiles.models import CompanyProfile
+from drf_haystack.serializers import HaystackSerializer
+from apps.catalogue.search_indexes import ProductIndex
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +28,7 @@ Category = get_model('catalogue', 'Category')
 StockRecord = get_model('partner', 'StockRecord')
 Product = get_model('catalogue', 'Product')
 ProductClass = get_model('catalogue', 'ProductClass')
+CustomUser = get_user_model()
 
 # SimpleJWT Serializer (Customized)
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -149,6 +156,131 @@ class ProductReadOnlySerializer(serializers.ModelSerializer):
 # =======================================================
 # --- Serializers for Writing Data (POST, PUT, PATCH) ---
 # =======================================================
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    # Slaptažodžio patvirtinimas (tik rašymui)
+    password2 = serializers.CharField(style={'input_type': 'password'}, write_only=True, label=_("Confirm password"))
+
+    # Įmonės laukai (neprivalomi serializerio lygmenyje, tikrinami validacijoje)
+    company_name = serializers.CharField(required=False, allow_blank=True, max_length=255, write_only=True)
+    company_registration_number = serializers.CharField(required=False, allow_blank=True, max_length=30, write_only=True)
+    company_vat_number = serializers.CharField(required=False, allow_blank=True, max_length=50, write_only=True)
+    legal_address = serializers.CharField(required=False, allow_blank=True, max_length=255, write_only=True)
+    legal_city = serializers.CharField(required=False, allow_blank=True, max_length=150, write_only=True)
+    legal_zip_code = serializers.CharField(required=False, allow_blank=True, max_length=20, write_only=True)
+    legal_country = serializers.CharField(required=False, allow_blank=True, max_length=150, write_only=True)
+    company_phone = serializers.CharField(required=False, allow_blank=True, max_length=30, write_only=True)
+    company_email = serializers.EmailField(required=False, allow_blank=True, write_only=True)
+    contact_person = serializers.CharField(required=False, allow_blank=True, max_length=255, write_only=True)
+    contact_person_phone = serializers.CharField(required=False, allow_blank=True, max_length=30, write_only=True)
+    contact_person_email = serializers.EmailField(required=False, allow_blank=True, write_only=True)
+    contact_person_position = serializers.CharField(required=False, allow_blank=True, max_length=100, write_only=True)
+
+    class Meta:
+        model = CustomUser
+        # Laukai, kuriuos tikimės gauti iš API užklausos
+        fields = [
+            'email', 'password', 'password2', 'user_type',
+            'first_name', 'last_name',
+            # Įmonės laukai (apdorojami create/validate)
+            'company_name', 'company_registration_number', 'company_vat_number',
+            'legal_address', 'legal_city', 'legal_zip_code', 'legal_country',
+            'company_phone', 'company_email', 'contact_person',
+            'contact_person_phone', 'contact_person_email', 'contact_person_position'
+        ]
+        extra_kwargs = {
+            'password': {'write_only': True, 'style': {'input_type': 'password'}, 'min_length': 8}, # Pridėtas min_length
+            'first_name': {'required': False},
+            'last_name': {'required': False},
+            'phone_number': {'required': False}, # Laikome neprivalomu User modelyje
+        }
+
+    def validate(self, attrs):
+        """ Validacija slaptažodžiams ir įmonės laukams. """
+        # Slaptažodžių sutapimas
+        password = attrs.get('password')
+        password2 = attrs.pop('password2', None) # Išimam password2 iš attrs
+        if password and password2 and password != password2:
+            raise serializers.ValidationError({"password2": _("Passwords do not match.")})
+
+        # Įmonės laukų privalomumas
+        user_type = attrs.get('user_type')
+        if user_type == CustomUser.USER_TYPE_COMPANY:
+            # Nurodom privalomus laukus įmonei
+            required_company_fields = {
+                'company_name': _("Company Name"),
+                'company_registration_number': _("Registration Number"),
+                'legal_address': _("Legal Address"),
+                'legal_city': _("Legal City"),
+                'legal_country': _("Legal Country"),
+                # ... galbūt kiti ...
+            }
+            missing_fields = []
+            for field_name, field_label in required_company_fields.items():
+                if not attrs.get(field_name):
+                    # Renkam klaidas į vieną vietą
+                    missing_fields.append(field_name)
+            if missing_fields:
+                # Grąžinam visas klaidas kartu
+                errors = {field: [_("This field is required for company accounts.")] for field in missing_fields}
+                raise serializers.ValidationError(errors)
+
+        # Galima pridėti kitą validaciją (pvz., email unikalumas jau tikrinamas modelio)
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        """ Sukuria CustomUser ir CompanyProfile (jei reikia). """
+        logger.info(f"Attempting to create user with email: {validated_data.get('email')}")
+
+        # Atskiriam įmonės duomenis
+        company_data_keys = [
+            'company_name', 'company_registration_number', 'company_vat_number',
+            'legal_address', 'legal_city', 'legal_zip_code', 'legal_country',
+            'company_phone', 'company_email', 'contact_person',
+            'contact_person_phone', 'contact_person_email', 'contact_person_position'
+        ]
+        company_info = {key: validated_data.pop(key) for key in company_data_keys if key in validated_data}
+        logger.debug(f"Company info extracted: {company_info}")
+
+        # Sukuriam vartotoją naudojant manager'io create_user
+        try:
+            # Perduodam tik tuos laukus, kurie yra CustomUser modelyje
+            user = CustomUser.objects.create_user(
+                email=validated_data['email'],
+                password=validated_data['password'],
+                user_type=validated_data.get('user_type', CustomUser.USER_TYPE_PRIVATE),
+                first_name=validated_data.get('first_name', ''),
+                last_name=validated_data.get('last_name', ''),
+                # phone_number=validated_data.get('phone_number', '') # Jei phone_number yra CustomUser
+            )
+            logger.info(f"User created successfully: {user.email} (ID: {user.pk})")
+        except IntegrityError:
+             # Dažniausiai dėl email unikalumo pažeidimo
+             logger.warning(f"User creation failed for email: {validated_data.get('email')} - possible duplicate.")
+             raise serializers.ValidationError({'email': _("User with this email already exists.")})
+        except Exception as e:
+             logger.error(f"Unexpected error during user creation: {e}", exc_info=True)
+             raise serializers.ValidationError(_("An unexpected error occurred during user creation."))
+
+
+        # Jei įmonė ir turim reikiamų duomenų, kuriam profilį
+        if user.is_company and company_info.get('company_name'):
+            logger.info(f"Creating CompanyProfile for user: {user.email}")
+            try:
+                # Pridedam user prie company_info prieš create
+                company_info['user'] = user
+                CompanyProfile.objects.create(**company_info)
+                logger.info(f"CompanyProfile created successfully for user: {user.email}")
+            except Exception as e:
+                # Svarbu: Klaida kuriant profilį. Ką daryti?
+                # Variantas 1: Anuliuoti vartotojo kūrimą (dėl @transaction.atomic tai įvyks automatiškai, jei čia mesim klaidą)
+                logger.error(f"Failed to create CompanyProfile for user {user.email}: {e}", exc_info=True)
+                raise serializers.ValidationError(_("Could not create company profile. Registration cancelled."))
+                # Variantas 2: Palikti vartotoją be profilio, bet loginti klaidą ir pranešti (rizikinga)
+                # pass
+        return user
 
 class StockRecordWriteSerializer(serializers.ModelSerializer):
     """ Serializer for receiving StockRecord data. Uses 'price' field. """
@@ -408,3 +540,41 @@ class ProductWriteSerializer(WritableNestedModelSerializer):
             if images_to_delete.exists():
                 logger.debug(f"Deleting images {list(images_to_delete.values_list('pk', flat=True))} for product {product.pk}")
                 images_to_delete.delete()
+
+#---- Serializeris Haystack paieškai ----
+class ProductHaystackSerializer(HaystackSerializer):
+     price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+     
+     """
+    Serializer for Product search results from Haystack.
+    """
+    # Galima pridėti papildomus laukus, kurie nėra tiesiogiai indekse,
+    # bet gali būti gauti iš 'object' (originalaus Django modelio objekto)
+    # Pavyzdžiui, jei norite pilnesnės kategorijų informacijos:
+    # categories = CategoryReadOnlySerializer(source='object.categories.all', many=True, read_only=True)
+    # Arba nuorodos į paveikslėlius, jei jos nėra indekse:
+    # images = ProductImageReadOnlySerializer(source='object.images.all', many=True, read_only=True)
+
+    # Jei norite naudoti 'highlighting' iš Haystack:
+    # highlighted = serializers.SerializerMethodField()
+    # def get_highlighted(self, obj):
+    #     if hasattr(obj, 'highlighted') and obj.highlighted and obj.highlighted['text']:
+    #         return obj.highlighted['text'][0]
+    #     return ''
+     class Meta:
+        # Nurodykite indekso pavadinimą
+        index_classes = [ProductIndex]
+        fields = [
+            'title',
+            'upc',
+            'categories',
+            'category_slug',
+            'price',
+            'partner_id',
+            'partner_name',
+            'product_class',
+            'condition',
+            'is_public',
+            'location_city',
+            'date_created',
+        ]

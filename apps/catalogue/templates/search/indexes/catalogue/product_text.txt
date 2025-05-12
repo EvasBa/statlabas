@@ -1,0 +1,9 @@
+{{ object.title }}
+{{ object.description }}
+{{ object.upc }}
+{% for category in object.categories.all %}{{ category.name }} {% endfor %}
+{% for attr_value in object.attribute_values.all %}{{ attr_value.value_as_text }} {% endfor %}
+{% for stockrecord in object.stockrecords.all %}
+    {% if stockrecord.partner %}{{ stockrecord.partner.name }}{% endif %}
+    {% if stockrecord.warehouse %}{{ stockrecord.warehouse.city }} {{ stockrecord.warehouse.name }}{% endif %}
+{% endfor %}

@@ -1,9 +1,11 @@
 from django.contrib.gis.db import models as gis_models
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import AllowAny
-from rest_framework import viewsets, status, serializers # Pridedam status ir serializers
+from rest_framework import viewsets, status, serializers, generics # Pridedam status ir serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from drf_haystack.viewsets import HaystackViewSet
+from drf_haystack.filters import HaystackFilter, HaystackFacetFilter
 from django.shortcuts import get_object_or_404
 from oscar.core.loading import get_model
 from .filters import ProductFilter # Importuojam mūsų filtrų klasę
@@ -15,15 +17,19 @@ from django.core.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework import permissions, filters, viewsets
-from .serializers import ProductWriteSerializer, ProductReadOnlySerializer, CustomTokenObtainPairSerializer # Importuojam abu
+from .serializers import ProductWriteSerializer, ProductReadOnlySerializer, CustomTokenObtainPairSerializer, UserRegistrationSerializer, ProductHaystackSerializer # Importuojam abu
         # Importuojam reikalingas GIS funkcijas ir modelius
 from django.db import models
 from django.db.models import Q, Min
 from django.contrib.gis.db.models.functions import Distance
-from django.contrib.gis.measure import D
+from django.contrib.gis.measure import D as GisDistance
 from django.db.models.functions import Coalesce
 from django.contrib.gis.geos import Point
+from haystack.query import SearchQuerySet
 
+# logging
+import logging
+logger = logging.getLogger(__name__)
 
 # Importuojam modelius
 Product = get_model('catalogue', 'Product')
@@ -41,22 +47,18 @@ class StandardResultsSetPagination(PageNumberPagination): # Klasė puslapiavimui
     max_page_size = 100
 
 
-class PublicProductViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = ProductReadOnlySerializer
+class PublicProductViewSet(HaystackViewSet):
+    index_models = [Product] # Nurodom, kad indeksuosim Product modelį
+    serializer_class = ProductHaystackSerializer # Naudojam mūsų serializerį
     permission_classes = [permissions.AllowAny]
     pagination_class = StandardResultsSetPagination
-    queryset = Product.objects.filter(is_public=True).prefetch_related(
-        'stockrecords__partner', 'stockrecords__warehouse',
-        'attribute_values__attribute__option_group__options',
-        'images', 'categories'
-    ).select_related('product_class').distinct()
-
-    # --- Pridedame Filtravimą, Paiešką, Rikiavimą ---
-    filter_backends = [
-        DjangoFilterBackend, # Mūsų sukurtiems filtrams
-        filters.SearchFilter,  # Paieškai
-        filters.OrderingFilter # Rikiavimui
-    ]
+    # Naudojam mūsų sukurtą filtrų klasę
+    filter_backends = (HaystackFilter, filters.OrderingFilter)
+    ordering_fields = ['title', 'date_created', 'price'] # Laukai, pagal kuriuos galima rikiuoti
+    ordering = ['-date_created'] # Numatytasis rikiavimas
+    facet_fields = ['categories', 'category_slug'] # Laukai, pagal kuriuos bus facet'ai <--- Papildyti
+    
+    
     filterset_class = ProductFilter # Nurodom mūsų filtrų klasę
 
     search_fields = [ # Laukai, pagal kuriuos ieškosime ( регистрo nejautri paieška)
@@ -70,114 +72,55 @@ class PublicProductViewSet(viewsets.ReadOnlyModelViewSet):
         # 'attribute_values__value_option__option',
     ]
 
-    ordering_fields = [ # Laukai, pagal kuriuos galima rikiuoti (pvz., ?ordering=price)
-        'title',
-        'date_created',
-        # Rikiavimas pagal kainą (imama mažiausia kaina iš stockrecords)
-        # Reikia anotacijos, todėl paprasčiau pridėti prie ordering
-        # 'stockrecords__price', # Tai rikiuos pagal visus stockrecordus, ne pagal mažiausią kainą
-        'price' # Pridėsime anotaciją žemiau
-    ]
-    ordering = ['-date_created'] # Numatytasis rikiavimas
-
-    def get_queryset(self):
-        """ Anotuojame queryset'ą su mažiausia kaina rikiavimo galimybei. """
-        queryset = super().get_queryset()
-        # Anotuojame su mažiausia kaina iš susijusių stockrecords
-        from django.db.models import Min
-        queryset = queryset.annotate(
-            price=Min('stockrecords__price') # Naudojam 'price' lauką iš StockRecord
-        )
-        return queryset
-
     # --- Geografinės Paieškos Metodas (Pridedam kaip veiksmą) ---
     # Šis metodas leidžia ieškoti produktų pagal geografinę vietą
     @action(detail=False, methods=['get'])
     def nearby(self, request):
-        """
-        Find products near a given location.
-        
-        Query Parameters:
-            lat (float): Latitude of the search point
-            lon (float): Longitude of the search point
-            radius (float): Search radius in kilometers (default: 5)
-            
-        Returns:
-            Paginated list of products ordered by distance
-        """
-    # Get and validate parameters
-        try:
-            user_lat = float(request.query_params.get('lat'))
-            user_lon = float(request.query_params.get('lon'))
-            radius = float(request.query_params.get('radius', 5))
-        except (TypeError, ValueError):
+        latitude = request.query_params.get('lat')
+        longitude = request.query_params.get('lon')
+        radius_km = request.query_params.get('radius', 20)
+
+        if not latitude or not longitude:
             return Response(
-                {"error": "Valid latitude, longitude, and radius are required."},
+                {"error": "Parameters 'lat' and 'lon' are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Create user location point
         try:
+            user_lat = float(latitude)
+            user_lon = float(longitude)
+            radius = float(radius_km)
+            # Svarbu: Haystack .dwithin() tikisi Django GIS Point objekto
             user_point = Point(user_lon, user_lat, srid=4326)
-        except Exception as e:
-            return Response(
-                {"error": f"Could not create location point: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid parameters."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            # Find products with stock records near the location
-            nearby_stockrecords = StockRecord.objects.select_related(
-                'warehouse', 'partner', 'product'
-            ).annotate(
-                effective_location=Coalesce(
-                    'warehouse__location',
-                    'partner__default_location',
-                    output_field=gis_models.PointField()
-                )
-            ).annotate(
-                distance=Distance('effective_location', user_point)
-            ).filter(
-                Q(warehouse__location__isnull=False) | 
-                Q(partner__default_location__isnull=False),
-                product__is_public=True,
-                num_in_stock__gt=0
-            ).filter(
-                distance__lte=D(km=radius)
-            ).order_by('distance')
+        # Sukuriame SearchQuerySet
+        # Įsitikinkite, kad jūsų ProductIndex turi LocationField pavadinimu 'location_point'
+        # ir prepare_location_point metodą.
+        sqs = SearchQuerySet().models(Product).filter(is_public=True) # Pradedam nuo viešų produktų
+        # Atliekame geografinę paiešką
+        sqs = sqs.dwithin('location_point', user_point, GisDistance(km=radius))
+        # Pastaba: 'location_point' yra pavyzdinis pavadinimas lauko jūsų ProductIndex.
+        # Jį reikia apibrėžti ProductIndex:
+        # location_point = indexes.LocationField(null=True)
+        # def prepare_location_point(self, obj): ... grąžina GIS Point ...
 
-            # Get unique product IDs with their minimum distance
-            product_ids = nearby_stockrecords.values_list('product_id', flat=True).distinct()
+        # Puslapiavimas Haystack rezultatams
+        # HaystackViewSet turi savo puslapiavimo logiką, bet čia mes darome custom action
+        # Todėl reikia rankiniu būdu puslapiuoti
+        page = self.paginate_queryset(list(sqs)) # Svarbu konvertuoti į sąrašą prieš puslapiuojant Haystack SQS
 
-            # Get full product details with minimum distance
-            queryset = self.get_queryset().filter(
-                id__in=product_ids
-            ).annotate(
-                min_distance=Min(
-                    Distance(
-                        Coalesce(
-                            'stockrecords__warehouse__location',
-                            'stockrecords__partner__default_location'
-                        ),
-                        user_point
-                    )
-                )
-            ).order_by('min_distance')
+        if page is not None:
+            # Svarbu: HaystackViewSet.get_serializer laukia SearchResult objektų.
+            # Jei norime naudoti ProductReadOnlySerializer, reikia perduoti Django objektus.
+            # Tačiau, jei page yra sąrašas SearchResult, reikia HaystackSerializer.
+            # Kadangi naudojame HaystackViewSet, get_serializer turėtų veikti su SearchResult.
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
-            # Apply pagination
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
-
-            serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data)
-
-        except Exception as e:
-            return Response(
-                {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        # Jei nėra puslapiavimo (retai pasitaiko su HaystackViewSet)
+        serializer = self.get_serializer(list(sqs), many=True) # Konvertuojam į sąrašą
+        return Response(serializer.data)
 
 
 class PartnerProductViewSet(viewsets.ModelViewSet):
@@ -281,3 +224,51 @@ class PartnerProductViewSet(viewsets.ModelViewSet):
              raise PermissionDenied("Partner profile not found.")
         except AttributeError:
              raise PermissionDenied("User does not have a partner profile.")
+
+class UserRegistrationView(generics.CreateAPIView):
+    """
+    API endpoint for user registration.
+    """
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [permissions.AllowAny] # Leidžiam registruotis visiems
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+            user = serializer.save() # Iškviečia serializer.create()
+            headers = self.get_success_headers(serializer.data)
+
+            # --- Generuojame JWT tokenus po sėkmingos registracijos ---
+            logger.info(f"Registration successful for {user.email}. Generating tokens.")
+            try:
+                refresh = RefreshToken.for_user(user)
+                # TODO: Apsvarstyti, ar grąžinti tokenus su custom claims iškart.
+                # Kol kas grąžinam standartinius.
+                data = {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                    # Galima grąžinti ir dalį vartotojo duomenų
+                    'user': {
+                        'id': user.pk,
+                        'email': user.email,
+                        'user_type': user.user_type
+                    }
+                }
+                return Response(data, status=status.HTTP_201_CREATED, headers=headers)
+            except Exception as e:
+                 # Jei nepavyksta generuoti tokenų (neturėtų nutikti)
+                 logger.error(f"Could not generate tokens for user {user.email} after registration: {e}", exc_info=True)
+                 # Grąžinam sėkmę, bet be tokenų - vartotojas turės prisijungti atskirai
+                 return Response(
+                     {"message": "Registration successful, but could not log you in automatically. Please log in."},
+                     status=status.HTTP_201_CREATED,
+                     headers=headers
+                 )
+
+        except serializers.ValidationError as e:
+            logger.warning(f"Registration validation failed: {e.detail}")
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e: # Kitos netikėtos klaidos
+             logger.error(f"Unexpected error during registration: {e}", exc_info=True)
+             return Response({"error": "An unexpected error occurred during registration."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
