@@ -4,8 +4,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework import viewsets, status, serializers, generics # Pridedam status ir serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from drf_haystack.viewsets import HaystackViewSet
-from drf_haystack.filters import HaystackFilter, HaystackFacetFilter
 from django.shortcuts import get_object_or_404
 from oscar.core.loading import get_model
 from .filters import ProductFilter # Importuojam mūsų filtrų klasę
@@ -17,7 +15,7 @@ from django.core.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework import permissions, filters, viewsets
-from .serializers import ProductWriteSerializer, ProductReadOnlySerializer, CustomTokenObtainPairSerializer, UserRegistrationSerializer, ProductHaystackSerializer # Importuojam abu
+from .serializers import ProductWriteSerializer, ProductReadOnlySerializer, CustomTokenObtainPairSerializer, UserRegistrationSerializer, ProductDocumentSerializer # Importuojam abu
         # Importuojam reikalingas GIS funkcijas ir modelius
 from django.db import models
 from django.db.models import Q, Min
@@ -26,6 +24,20 @@ from django.contrib.gis.measure import D as GisDistance
 from django.db.models.functions import Coalesce
 from django.contrib.gis.geos import Point
 from haystack.query import SearchQuerySet
+from django_elasticsearch_dsl_drf.viewsets import DocumentViewSet
+from django_elasticsearch_dsl_drf.constants import (
+    LOOKUP_FILTER_RANGE,
+    SUGGESTER_COMPLETION,
+    LOOKUP_FILTER_TERMS,
+)
+from elasticsearch_dsl import A
+from django_elasticsearch_dsl_drf.filter_backends import (
+    FilteringFilterBackend,
+    CompoundSearchFilterBackend,
+    OrderingFilterBackend,
+    FacetedSearchFilterBackend,
+)
+from apps.catalogue.documents import ProductDocument  # Add this import
 
 # logging
 import logging
@@ -47,80 +59,95 @@ class StandardResultsSetPagination(PageNumberPagination): # Klasė puslapiavimui
     max_page_size = 100
 
 
-class PublicProductViewSet(HaystackViewSet):
-    index_models = [Product] # Nurodom, kad indeksuosim Product modelį
-    serializer_class = ProductHaystackSerializer # Naudojam mūsų serializerį
-    permission_classes = [permissions.AllowAny]
-    pagination_class = StandardResultsSetPagination
-    # Naudojam mūsų sukurtą filtrų klasę
-    filter_backends = (HaystackFilter, filters.OrderingFilter)
-    ordering_fields = ['title', 'date_created', 'price'] # Laukai, pagal kuriuos galima rikiuoti
-    ordering = ['-date_created'] # Numatytasis rikiavimas
-    facet_fields = ['categories', 'category_slug'] # Laukai, pagal kuriuos bus facet'ai <--- Papildyti
-    
-    
-    filterset_class = ProductFilter # Nurodom mūsų filtrų klasę
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 24
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
-    search_fields = [ # Laukai, pagal kuriuos ieškosime ( регистрo nejautri paieška)
-        'title',
-        'description',
-        'upc',
-        'stockrecords__partner__name', # Pagal tiekėjo vardą
-        'categories__name', # Pagal kategorijos pavadinimą
-        # Galima pridėti atributus, bet gali būti lėta:
-        # 'attribute_values__value_text',
-        # 'attribute_values__value_option__option',
-    ]
+# class PublicProductViewSet(HaystackViewSet):
+#     index_models = [Product]
+#     serializer_class = ProductHaystackSerializer # Serializeris pagrindiniams rezultatams
+#     filter_backends = [HaystackFilter]
+#     permission_classes = [permissions.AllowAny]
+#     pagination_class = StandardResultsSetPagination
+#     search_fields = ['text'] 
 
-    # --- Geografinės Paieškos Metodas (Pridedam kaip veiksmą) ---
-    # Šis metodas leidžia ieškoti produktų pagal geografinę vietą
-    @action(detail=False, methods=['get'])
-    def nearby(self, request):
-        latitude = request.query_params.get('lat')
-        longitude = request.query_params.get('lon')
-        radius_km = request.query_params.get('radius', 20)
+#     facet_serializer_class = CustomFacetSerializer
 
-        if not latitude or not longitude:
-            return Response(
-                {"error": "Parameters 'lat' and 'lon' are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        try:
-            user_lat = float(latitude)
-            user_lon = float(longitude)
-            radius = float(radius_km)
-            # Svarbu: Haystack .dwithin() tikisi Django GIS Point objekto
-            user_point = Point(user_lon, user_lat, srid=4326)
-        except (TypeError, ValueError):
-            return Response({"error": "Invalid parameters."}, status=status.HTTP_400_BAD_REQUEST)
+#     # Laukai rikavimui (turi būti 'sortable=True' indekse arba skaitiniai/datos)
+#     ordering_fields = {
+#         "title": "title", # Jei title indekse yra sortable
+#         "date_created": "date_created",
+#         "price": "price",
+#         "relevance": "_score", # Specialus rikiavimas pagal relevantiškumą (kai yra 'q')
+#     }
+#     ordering = ['-date_created'] # Numatytasis rikiavimas
 
-        # Sukuriame SearchQuerySet
-        # Įsitikinkite, kad jūsų ProductIndex turi LocationField pavadinimu 'location_point'
-        # ir prepare_location_point metodą.
-        sqs = SearchQuerySet().models(Product).filter(is_public=True) # Pradedam nuo viešų produktų
-        # Atliekame geografinę paiešką
-        sqs = sqs.dwithin('location_point', user_point, GisDistance(km=radius))
-        # Pastaba: 'location_point' yra pavyzdinis pavadinimas lauko jūsų ProductIndex.
-        # Jį reikia apibrėžti ProductIndex:
-        # location_point = indexes.LocationField(null=True)
-        # def prepare_location_point(self, obj): ... grąžina GIS Point ...
+#     # Laukai facetavimui (turi būti 'faceted=True' indekse)
+#     # URL parametrai facetiniam filtravimui paprastai bus tokie patys kaip laukų pavadinimai čia
+#     # Pvz., ?category_slugs=gipso-plokstes&partner_name=Senukai
+#     facet_fields = ['product_class_name', 'category_slugs', 'partner_name', 'condition', 'location_city']
+#     # Galima nurodyti ir facetų parinktis, pvz., maksimalų grąžinamų facetų skaičių
+#     # facet_options = {
+#     #     'category_slugs': {'limit': 10, 'order': 'count'},
+#     # }
 
-        # Puslapiavimas Haystack rezultatams
-        # HaystackViewSet turi savo puslapiavimo logiką, bet čia mes darome custom action
-        # Todėl reikia rankiniu būdu puslapiuoti
-        page = self.paginate_queryset(list(sqs)) # Svarbu konvertuoti į sąrašą prieš puslapiuojant Haystack SQS
+#     # Serializeris facetų duomenims formuoti (jei norite keisti standartinį)
+#     facet_serializer_class = CustomFacetSerializer # Naudojam savo arba standartinį HaystackFacetSerializer
 
-        if page is not None:
-            # Svarbu: HaystackViewSet.get_serializer laukia SearchResult objektų.
-            # Jei norime naudoti ProductReadOnlySerializer, reikia perduoti Django objektus.
-            # Tačiau, jei page yra sąrašas SearchResult, reikia HaystackSerializer.
-            # Kadangi naudojame HaystackViewSet, get_serializer turėtų veikti su SearchResult.
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+#     # `list` metodas dabar turėtų automatiškai grąžinti ir facetus, jei naudojamas HaystackFacetFilter
+#     # ir facet_serializer_class yra nustatytas.
+#     # Facetai gali būti grąžinami kaip 'facets' raktas JSON atsakyme arba HTTP antraštėse.
+#     # Patikrinkite drf-haystack dokumentaciją dėl tikslaus elgesio.
 
-        # Jei nėra puslapiavimo (retai pasitaiko su HaystackViewSet)
-        serializer = self.get_serializer(list(sqs), many=True) # Konvertuojam į sąrašą
-        return Response(serializer.data)
+#     # Jei norite rankiniu būdu įtraukti facet'us į atsakymą (patikrinkite, ar tai būtina):
+#     # def list(self, request, *args, **kwargs):
+#     #     response = super().list(request, *args, **kwargs)
+#     #     # queryset čia yra SearchQuerySet
+#     #     queryset = self.filter_queryset(self.get_queryset())
+#     #     # get_facets yra HaystackViewSet metodas
+#     #     facets_data = self.get_facets(queryset)
+#     #     if hasattr(response, 'data') and isinstance(response.data, dict) and facets_data:
+#     #         response.data['facets'] = facets_data # Pridedam prie pagrindinio atsakymo
+#     #     elif hasattr(response, 'data') and isinstance(response.data, list) and facets_data:
+#     #         # Jei response.data yra sąrašas (kai nėra puslapiavimo), galim padaryti žodyną
+#     #         response.data = {'results': response.data, 'facets': facets_data}
+#     #     return response
+
+
+#     @action(detail=False, methods=['get'])
+#     def nearby(self, request):
+#         latitude = request.query_params.get('lat')
+#         longitude = request.query_params.get('lon')
+#         radius_km = request.query_params.get('radius', "20")
+
+#         if not latitude or not longitude:
+#             return Response({"error": "Parameters 'lat' and 'lon' are required."}, status=status.HTTP_400_BAD_REQUEST)
+#         try:
+#             user_lat = float(latitude)
+#             user_lon = float(longitude)
+#             radius = float(radius_km)
+#             user_point = Point(user_lon, user_lat, srid=4326)
+#         except (TypeError, ValueError):
+#             return Response({"error": "Invalid parameters."}, status=status.HTTP_400_BAD_REQUEST)
+
+#         # Naudojam Haystack queryset'ą iš ViewSet'o
+#         # get_queryset() grąžins SearchQuerySet().models(Product)
+#         sqs = self.get_queryset().filter(is_public=True)
+#         # 'location_point' turi būti apibrėžtas ProductIndex
+#         sqs = sqs.dwithin('location_point', user_point, GisDistance(km=radius))
+#         # Galima pridėti rikavimą pagal atstumą, jei Haystack ir ES backend'as tai palaiko
+#         # sqs = sqs.distance('location_point', user_point).order_by('distance')
+
+#         page = self.paginate_queryset(sqs) # HaystackViewSet paginate_queryset moka dirbti su SQS
+#         if page is not None:
+#             serializer = self.get_serializer(page, many=True) # Naudos ProductHaystackSerializer
+#             return self.get_paginated_response(serializer.data)
+
+#         serializer = self.get_serializer(sqs, many=True)
+#         return Response(serializer.data)
+
+# ... (PartnerProductViewSet ir CustomTokenObtainPairView lieka kaip anksčiau) ...
 
 
 class PartnerProductViewSet(viewsets.ModelViewSet):
@@ -272,3 +299,117 @@ class UserRegistrationView(generics.CreateAPIView):
         except Exception as e: # Kitos netikėtos klaidos
              logger.error(f"Unexpected error during registration: {e}", exc_info=True)
              return Response({"error": "An unexpected error occurred during registration."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+
+
+
+class PublicProductDocumentViewSet(DocumentViewSet):
+    """
+    Public API endpoint that allows products to be viewed, using Elasticsearch.
+    """
+    document = ProductDocument 
+    serializer_class = ProductDocumentSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [permissions.AllowAny]
+
+    filter_backends = [
+        FilteringFilterBackend,
+        CompoundSearchFilterBackend,  # Updated from SearchFilterBackend
+        OrderingFilterBackend,
+        FacetedSearchFilterBackend,
+    ]
+
+    # Updated faceted search fields configuration
+    faceted_search_fields = {
+        'categories': {
+            'field': 'categories.slug.raw',
+            'enabled': True,
+            'options': {
+                'size': 20,
+                'min_doc_count': 1
+            }
+        },
+        'condition': {
+            'field': 'condition.raw',
+            'enabled': True,
+            'options': {
+                'size': 10,
+                'min_doc_count': 1
+            }
+        },
+        'partner_name': {
+            'field': 'partner_name.raw',
+            'enabled': True,
+            'options': {
+                'size': 10,
+                'min_doc_count': 1
+            }
+        },
+        'price': {
+            'field': 'price',
+            'enabled': True,
+            'options': {
+                'aggs': {
+                    'price_ranges': {
+                        'range': {
+                            'field': 'price',
+                            'ranges': [
+                                {'to': 10.0, 'key': '<10'},
+                                {'from': 10.0, 'to': 50.0, 'key': '10-50'},
+                                {'from': 50.0, 'to': 100.0, 'key': '50-100'},
+                                {'from': 100.0, 'key': '>100'}
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    # Keep your existing configurations
+    filter_fields = {
+        'id': {
+            'field': 'id',
+            'lookups': ['exact', 'in'],
+        },
+        'title': {
+            'field': 'title.raw',
+            'lookups': ['exact', 'iexact', 'contains', 'icontains'],
+        },
+        'price': {
+            'field': 'price',
+            'lookups': ['exact', 'gte', 'lte', 'gt', 'lt', 'range'],
+        },
+        'categories': {
+            'field': 'categories.slug.raw',
+            'lookups': ['exact', 'in'],
+        },
+        'condition': {
+            'field': 'condition.raw',
+            'lookups': ['exact', 'in'],
+        },
+        'partner_name': {
+            'field': 'partner_name.raw',
+            'lookups': ['exact', 'in'],
+        },
+        'is_public': {
+            'field': 'is_public',
+            'lookups': ['exact'],
+        }
+    }
+
+    search_fields = {
+        'title': {'boost': 2},
+        'description': None,
+        'upc': None,
+        'categories.name': None,
+        'partner_name': None,
+    }
+
+    ordering_fields = {
+        'title': 'title.raw',
+        'price': 'price',
+        'date_created': 'date_created',
+    }
+    ordering = ('-date_created',)

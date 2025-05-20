@@ -79,12 +79,14 @@ INSTALLED_APPS = [
 
     # 3rd-party apps
     'widget_tweaks',
-    'haystack',
-    'drf_haystack',
+    'haystack', # Elasticsearch
+    #'drf_haystack', # Elasticsearch
     'treebeard',
     'sorl.thumbnail',
     'django_tables2',
     'rest_framework',
+    'django_elasticsearch_dsl',
+    'django_elasticsearch_dsl_drf',
     'rest_framework_simplejwt',
     'django.contrib.gis', # PostGIS
     'django_filters', # Django Filter
@@ -161,18 +163,39 @@ DATABASES = {
 if not DEBUG and not DATABASES['default'].get('PASSWORD'):
     raise ImproperlyConfigured("DB_PASSWORD must be set for production.")
 
+# HAYSTACK_CONNECTIONS = {
+#     'default': {
+#         'ENGINE': 'haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine',
+#         'URL': 'http://127.0.0.1:9200/',
+#         'INDEX_NAME': 'statulab_marketplace',
+#         'EXCLUDED_INDEXES': [
+#             'oscar.apps.search.search_indexes.ProductIndex'
+#         ]
+#     },
+# }
+
+# HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor' # Pradžiai
+
 HAYSTACK_CONNECTIONS = {
     'default': {
-        'ENGINE': 'haystack.backends.elasticsearch7_backend.Elasticsearch7SearchEngine',
-        'URL': 'http://127.0.0.1:9200/',
-        'INDEX_NAME': 'statulab_marketplace',
-        'EXCLUDED_INDEXES': [
-            'oscar.apps.search.search_indexes.ProductIndex'
-        ]
+        'ENGINE': 'haystack.backends.simple_backend.SimpleEngine',
     },
 }
-HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor' # Pradžiai
 
+# Elasticsearch configuration
+ELASTICSEARCH_DSL = {
+    'default': {
+        'hosts': os.environ.get('ELASTICSEARCH_HOST', 'localhost:9200'),
+    },
+}
+
+ELASTICSEARCH_INDEX_NAMES = {
+    'apps.catalogue.documents.ProductDocument': 'marketplace_products',
+    'apps.catalogue.documents.CategoryDocument': 'marketplace_categories',
+}
+
+ELASTICSEARCH_DSL_AUTOSYNC = True
+ELASTICSEARCH_DSL_AUTO_REFRESH = True
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},

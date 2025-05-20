@@ -6,11 +6,11 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 import logging
 from django.core.exceptions import ValidationError
-from django.contrib.gis.geos import Point # Reikalingas Partner modeliui
+# Point import removed as it's not used in this file
 from django.contrib.auth import get_user_model
 from profiles.models import CompanyProfile
-from drf_haystack.serializers import HaystackSerializer
-from apps.catalogue.search_indexes import ProductIndex
+from django_elasticsearch_dsl_drf.serializers import DocumentSerializer
+from apps.catalogue.documents import ProductDocument
 
 
 
@@ -120,7 +120,7 @@ class StockRecordReadOnlySerializer(serializers.ModelSerializer): # Pataisytas p
     partner = PartnerReadOnlySerializer(read_only=True)
     warehouse = WarehouseReadOnlySerializer(read_only=True)
     # Pridedam kainą be PVM skaitymui
-    price = serializers.DecimalField(source='price_excl_tax', max_digits=12, decimal_places=2, read_only=True)
+    price = serializers.FloatField(source='price_excl_tax', read_only=True)
 
     class Meta:
         model = StockRecord
@@ -217,7 +217,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                 # ... galbūt kiti ...
             }
             missing_fields = []
-            for field_name, field_label in required_company_fields.items():
+            for field_name, _ in required_company_fields.items():
                 if not attrs.get(field_name):
                     # Renkam klaidas į vieną vietą
                     missing_fields.append(field_name)
@@ -397,7 +397,7 @@ class ProductWriteSerializer(WritableNestedModelSerializer):
                 'warehouse': stockrecord_data.get('warehouse')
             }
             logger.debug(f"Defaults for get_or_create StockRecord: {stockrecord_defaults}")
-            stockrecord, created = StockRecord.objects.get_or_create(
+            _, created = StockRecord.objects.get_or_create(
                 product=product,
                 partner=partner,
                 # warehouse=stockrecord_data.get('warehouse'), # Optional key part
@@ -502,7 +502,7 @@ class ProductWriteSerializer(WritableNestedModelSerializer):
             try:
                 attribute = ProductAttribute.objects.get(code=code, product_class=product.product_class)
                 defaults={'value': attribute.validate_value(value)}
-                attr_value_obj, created = ProductAttributeValue.objects.update_or_create(
+                _, created = ProductAttributeValue.objects.update_or_create(
                     product=product, attribute=attribute, defaults=defaults
                 )
                 logger.debug(f"{'Created' if created else 'Updated'} attribute '{code}' for product {product.pk}")
@@ -541,40 +541,67 @@ class ProductWriteSerializer(WritableNestedModelSerializer):
                 logger.debug(f"Deleting images {list(images_to_delete.values_list('pk', flat=True))} for product {product.pk}")
                 images_to_delete.delete()
 
-#---- Serializeris Haystack paieškai ----
-class ProductHaystackSerializer(HaystackSerializer):
-     price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-     
-     """
-    Serializer for Product search results from Haystack.
-    """
-    # Galima pridėti papildomus laukus, kurie nėra tiesiogiai indekse,
-    # bet gali būti gauti iš 'object' (originalaus Django modelio objekto)
-    # Pavyzdžiui, jei norite pilnesnės kategorijų informacijos:
-    # categories = CategoryReadOnlySerializer(source='object.categories.all', many=True, read_only=True)
-    # Arba nuorodos į paveikslėlius, jei jos nėra indekse:
-    # images = ProductImageReadOnlySerializer(source='object.images.all', many=True, read_only=True)
 
-    # Jei norite naudoti 'highlighting' iš Haystack:
-    # highlighted = serializers.SerializerMethodField()
-    # def get_highlighted(self, obj):
-    #     if hasattr(obj, 'highlighted') and obj.highlighted and obj.highlighted['text']:
-    #         return obj.highlighted['text'][0]
-    #     return ''
-     class Meta:
-        # Nurodykite indekso pavadinimą
-        index_classes = [ProductIndex]
-        fields = [
+class ProductDocumentSerializer(DocumentSerializer):
+    """
+    Serializer for the ProductDocument to be used with DRF.
+    Retrieves data directly from Elasticsearch.
+    """
+
+
+    # Jei norite rodyti paieškos įvertį (score)
+    score = serializers.FloatField(read_only=True, required=False)
+    # Jei norite rodyti paryškintus fragmentus (highlighting)
+    highlight = serializers.JSONField(read_only=True, required=False) # Arba CharField
+
+
+    class Meta:
+        document = ProductDocument # Nurodom Elasticsearch dokumentą
+        # Laukai, kuriuos norime grąžinti API atsakyme.
+        # Jie turi atitikti laukus, apibrėžtus ProductDocument.
+        # 'id' bus Elasticsearch dokumento _id.
+        fields = (
+            'id', # Elasticsearch dokumento ID
             'title',
+            'description', # Jei pridėjote prie ProductDocument
             'upc',
-            'categories',
-            'category_slug',
-            'price',
-            'partner_id',
-            'partner_name',
-            'product_class',
             'condition',
-            'is_public',
+            'product_class', # Tai bus objektas {'name': ..., 'slug': ...}
+            'categories',    # Tai bus sąrašas objektų [{'id': ..., 'name': ..., 'slug': ...}]
+            'price',
+            'num_in_stock', # Jei pridėjote prie ProductDocument
+            'partner_name',
+            # 'partner_id', # Jei pridėjote
             'location_city',
+            'location_point', # Grąžins {'lat': ..., 'lon': ...}
             'date_created',
-        ]
+            'is_public',
+            'attributes_text', # Jei pridėjote
+            # 'manufacturer', # Jei pridėjote kaip atskirą lauką dokumente
+            'score',       # Paieškos įvertis
+            'highlight',   # Paryškinti fragmentai
+            # "categories_data", # Jei naudojate SerializerMethodField ar source='object...'
+            # "images_data",
+        )
+
+        # Jei naudojate geografinę paiešką ir norite grąžinti atstumą
+        # geo_point_field = 'location_point' # Nurodo, kuris laukas yra geo_point
+
+        # Funkciniai siūlymai (jei naudojate)
+        # functional_suggester_fields = ('title_suggest',)
+
+
+# --- Serializeris Facetams (jei reikia pasirinktinio) 
+
+class CustomFacetSerializer(DocumentSerializer):
+    """Custom serializer for faceted search results."""
+    
+    class Meta:
+        document = ProductDocument
+        fields = (
+            'product_class_name',
+            'category_slugs',
+            'partner_name',
+            'condition',
+            'location_city',
+        )

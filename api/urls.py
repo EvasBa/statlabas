@@ -2,13 +2,18 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views # Importuojame vaizdus
-from .views import CustomTokenObtainPairView, PublicProductViewSet, UserRegistrationView # Importuojame mūsų CustomTokenObtainPairView
+from .views import CustomTokenObtainPairView, PublicProductDocumentViewSet, UserRegistrationView, PartnerProductViewSet # Importuojame mūsų CustomTokenObtainPairView
 
 # Sukuriame routerį
 router = DefaultRouter()
 # Registruojame VendorProductViewSet su 'vendor/products' maršrutu
 router.register(r'partner/products', views.PartnerProductViewSet, basename='partner-product')
-router.register(r'products', views.PublicProductViewSet, basename='product')
+
+router.register(
+    r'products/search',
+    PublicProductDocumentViewSet,
+    basename='product-search'
+)
 
 
 # API URL Patternai
